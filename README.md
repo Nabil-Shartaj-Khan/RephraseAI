@@ -1,7 +1,7 @@
 <h1>RephraseAI</h1>
 
 <p>
-RephraseAI is a simple web app that rewrites your text messages in different tones using AI. You can choose between friendly, professional, or concise styles. The app also keeps a history of your previous messages and rewrites, with copy buttons for easy use. This is an ongoing project and open for further improvements.
+RephraseAI is a simple web app that rewrites your text messages in different tones using AI. You can choose between friendly, professional, or concise styles. The app also keeps a history of your previous messages and rewrites, with copy buttons for easy use. <b>This is an ongoing project and open for further improvements.</b>
 
 </p>
 
