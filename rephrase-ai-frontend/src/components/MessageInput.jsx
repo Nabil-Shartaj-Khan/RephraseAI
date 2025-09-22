@@ -8,156 +8,137 @@ import {
   FormControl,
   InputLabel,
   Typography,
-  Paper,
+  Alert,
 } from "@mui/material";
+import Sentiment from "sentiment";
 
-function MessageRewriter() {
+function MessageInput({ setRewrites, setHistory }) {
   const [message, setMessage] = useState("");
   const [tone, setTone] = useState("friendly");
+  const [customTone, setCustomTone] = useState("");
   const [loading, setLoading] = useState(false);
-  const [rewrites, setRewrites] = useState([]);
-  const [history, setHistory] = useState([]);
+  const [error, setError] = useState(null);
+
+  // Syllable counter
+  const countSyllables = (word) => {
+    word = word.toLowerCase();
+    if (word.length <= 3) return 1;
+    word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, "");
+    word = word.replace(/^y/, "");
+    const syllables = word.match(/[aeiouy]{1,2}/g);
+    return syllables ? syllables.length : 1;
+  };
+
+  // Flesch Reading Ease
+  const calculateFlesch = (text) => {
+    const sentences = text.split(/[.!?]+/).filter(Boolean).length || 1;
+    const wordsArr = text.trim().split(/\s+/);
+    const words = wordsArr.length;
+    const syllables = wordsArr.reduce((sum, w) => sum + countSyllables(w), 0);
+    return 206.835 - 1.015 * (words / sentences) - 84.6 * (syllables / words);
+  };
+
+  const calculateMetrics = (text) => {
+    const words = text.trim().split(/\s+/).length;
+    const fleschScore = calculateFlesch(text);
+    const sentimentScore = new Sentiment().analyze(text).score;
+    return { fleschScore, sentiment: sentimentScore, wordCount: words };
+  };
 
   const handleRewrite = async () => {
     if (!message.trim()) return;
     setLoading(true);
+    setError(null);
 
     try {
       const response = await fetch("http://localhost:7000/api/rewrite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, tone }),
+        body: JSON.stringify({ message, tone: customTone.trim() || tone }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        alert(data.error || "Something went wrong on the server");
+        setError(data.error || "Server error");
         return;
       }
 
-      setRewrites(data.rewrites);
-      setHistory((prev) => [
-        { original: message, rewrites: data.rewrites },
-        ...prev,
-      ]);
-      setMessage("");
+      // Update rewrites in parent
+      if (setRewrites) setRewrites(data.rewrites);
+
+      // Update history in parent
+      if (setHistory) {
+        setHistory((prev) => [...prev, { message, rewrites: data.rewrites }]);
+      }
     } catch (err) {
       console.error(err);
-      alert(err.message || "Network error");
+      setError(err.message || "Network error");
     } finally {
       setLoading(false);
     }
   };
 
+  const metrics = message ? calculateMetrics(message) : null;
+
   return (
-    <Box sx={{ display: "flex", height: "100vh", p: 2, gap: 10 }}>
-      {/* History Column */}
-      <Box sx={{ width: "30%", overflowY: "auto" }}>
-        <Typography variant="h5" sx={{ mb: 1, fontWeight: "bold" }}>
-          Chat History
-        </Typography>
-        {history.map((item, idx) => (
-          <Paper key={idx} sx={{ p: 1, mb: 1 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: "bold" }}>Original:</Typography>
-            <Typography variant="body2" sx={{ mb: 1 }}>
-              {item.original}
-            </Typography>
-            <Typography variant="subtitle2" sx={{ fontWeight: "bold" }}>Rewrites:</Typography>
-            {item.rewrites.map((rw, i) => (
-              <Box
-                key={i}
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  mb: 0.5,
-                }}
-              >
-                <Typography variant="body2">{rw}</Typography>
-                <Button
-                  size="small"
-                  onClick={() => navigator.clipboard.writeText(rw)}
-                >
-                  Copy
-                </Button>
-              </Box>
-            ))}
-          </Paper>
-        ))}
-      </Box>
+    <Box sx={{ display: "flex", gap: 2, p: 2 }}>
+      {/* Metrics panel */}
+      {metrics && (
+        <Box sx={{ width: 220, p: 2, bgcolor: "#f1f1f1", borderRadius: 1 }}>
+          <Typography variant="h6" sx={{ mb: 1 }}>
+            Metrics
+          </Typography>
+          <Typography>Flesch: {metrics.fleschScore.toFixed(2)}</Typography>
+          <Typography>Words: {metrics.wordCount}</Typography>
+          <Typography>Sentiment: {metrics.sentiment}</Typography>
+        </Box>
+      )}
 
-      {/* Current Input + Rewrites Column */}
-      <Box sx={{ width: "70%" }}>
-        <Paper sx={{ p: 2, mb: 2 }}>
-          <TextField
-            label="Paste your message here..."
-            multiline
-            rows={4}
-            fullWidth
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            margin="normal"
-          />
+      {/* Main input */}
+      <Box sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+        {error && <Alert severity="error">{error}</Alert>}
 
-          <FormControl fullWidth margin="normal">
-            <InputLabel>Tone</InputLabel>
-            <Select
-              value={tone}
-              label="Tone"
-              onChange={(e) => setTone(e.target.value)}
-            >
-              <MenuItem value="friendly">Friendly</MenuItem>
-              <MenuItem value="professional">Professional</MenuItem>
-              <MenuItem value="concise">Concise</MenuItem>
-            </Select>
-          </FormControl>
+        <TextField
+          label="Paste your message here..."
+          multiline
+          rows={4}
+          fullWidth
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+        />
 
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={handleRewrite}
-            fullWidth
-            sx={{ mt: 2 }}
-            disabled={loading}
+        <FormControl fullWidth>
+          <InputLabel>Tone</InputLabel>
+          <Select
+            value={tone}
+            label="Tone"
+            onChange={(e) => setTone(e.target.value)}
           >
-            {loading ? "Rewriting..." : "Rewrite"}
-          </Button>
-        </Paper>
+            <MenuItem value="friendly">Friendly</MenuItem>
+            <MenuItem value="professional">Professional</MenuItem>
+            <MenuItem value="concise">Concise</MenuItem>
+          </Select>
+        </FormControl>
 
-        {/* Current Rewrites */}
-        {rewrites.length > 0 && (
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" sx={{ mb: 1, fontWeight: "bold" }}>
-              You can say it like this:
-            </Typography>
-            {rewrites.map((rw, idx) => (
-              <Box
-                key={idx}
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  mb: 1,
-                  p: 1,
-                  border: "1px solid #7d7979ff",
-                  borderRadius: 1,
-                }}
-              >
-                <Typography>{rw}</Typography>
-                <Button
-                  size="small"
-                  onClick={() => navigator.clipboard.writeText(rw)}
-                >
-                  Copy
-                </Button>
-              </Box>
-            ))}
-          </Paper>
-        )}
+        <TextField
+          label="Custom Tone Keywords (optional)"
+          fullWidth
+          value={customTone}
+          onChange={(e) => setCustomTone(e.target.value)}
+        />
+
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={handleRewrite}
+          disabled={loading}
+        >
+          {loading ? "Rewriting..." : "Rewrite"}
+        </Button>
       </Box>
     </Box>
   );
 }
 
-export default MessageRewriter;
+export default MessageInput;
