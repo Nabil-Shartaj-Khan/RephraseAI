@@ -51,10 +51,12 @@ function MessageInput({ setRewrites, setHistory }) {
     setError(null);
 
     try {
+      const combinedTone =
+        tone + (customTone.trim() ? `, ${customTone.trim()}` : "");
       const response = await fetch("http://localhost:7000/api/rewrite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, tone: customTone.trim() || tone }),
+        body: JSON.stringify({ message, tone: combinedTone }),
       });
 
       const data = await response.json();
